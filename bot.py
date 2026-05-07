@@ -46,10 +46,6 @@ CHECK_INTERVAL = 15
 
 BOT_NAME = "🐑 بوت تنبيهات الأضاحي"
 
-# ====================================
-# FILE
-# ====================================
-
 USERS_FILE = "users.json"
 
 # ====================================
@@ -62,31 +58,13 @@ try:
 
         with open(USERS_FILE, "r", encoding="utf-8") as f:
 
-            old_data = json.load(f)
-
-            user_db = {}
-
-            for uid, value in old_data.items():
-
-                if isinstance(value, str):
-
-                    user_db[uid] = {
-                        "wilaya": value,
-                        "name": "",
-                        "username": ""
-                    }
-
-                else:
-
-                    user_db[uid] = value
+            user_db = json.load(f)
 
     else:
 
         user_db = {}
 
-except Exception as e:
-
-    print("LOAD USERS ERROR:", e)
+except:
 
     user_db = {}
 
@@ -96,20 +74,14 @@ except Exception as e:
 
 def save_users():
 
-    try:
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
 
-        with open(USERS_FILE, "w", encoding="utf-8") as f:
-
-            json.dump(
-                user_db,
-                f,
-                ensure_ascii=False,
-                indent=4
-            )
-
-    except Exception as e:
-
-        print("SAVE USERS ERROR:", e)
+        json.dump(
+            user_db,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )
 
 # ====================================
 # GET DATA
@@ -118,16 +90,17 @@ def save_users():
 def get_data():
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json, text/plain, */*",
         "Referer": "https://adhahi.dz/",
-        "Origin": "https://adhahi.dz"
+        "Origin": "https://adhahi.dz",
+        "Connection": "keep-alive"
     }
 
     response = session.get(
         API_URL,
         headers=headers,
-        timeout=20
+        timeout=30
     )
 
     response.raise_for_status()
@@ -150,40 +123,35 @@ WILAYAS = [
 ]
 
 # ====================================
-# START MESSAGE
+# START
 # ====================================
 
-START_MSG = f"""
-{BOT_NAME}
+@bot.message_handler(commands=['start'])
+def start(message):
 
-🔔 بوت مراقبة حجز الأضاحي
+    uid = str(message.from_user.id)
 
-⚡ تنبيهات فورية
-📡 مراقبة مستمرة
-🌐 ربط مباشر بالموقع الرسمي
+    if uid not in user_db:
 
-اختر من القائمة:
-"""
+        user_db[uid] = {
+            "wilaya": ""
+        }
 
-# ====================================
-# MAIN MENU
-# ====================================
-
-def main_menu():
+        save_users()
 
     markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
         types.InlineKeyboardButton(
             "📍 اختيار ولايتي",
-            callback_data="choose_wilaya"
+            callback_data="choose"
         )
     )
 
     markup.add(
         types.InlineKeyboardButton(
             "🌍 فحص كل الولايات",
-            callback_data="check_all"
+            callback_data="all"
         )
     )
 
@@ -197,43 +165,27 @@ def main_menu():
     markup.add(
         types.InlineKeyboardButton(
             "🔎 فحص ولايتي",
-            callback_data="my_wilaya"
+            callback_data="my"
         )
     )
 
-    return markup
-
-# ====================================
-# START
-# ====================================
-
-@bot.message_handler(commands=['start'])
-def start(message):
-
-    uid = str(message.from_user.id)
-
-    if uid not in user_db:
-
-        user_db[uid] = {
-            "wilaya": "",
-            "name": message.from_user.first_name,
-            "username": message.from_user.username
-        }
-
-        save_users()
-
     bot.send_message(
         message.chat.id,
-        START_MSG,
-        reply_markup=main_menu()
+        f"""
+{BOT_NAME}
+
+⚡ مراقبة مباشرة لموقع الأضاحي
+🔔 تنبيهات فورية عند فتح الحجز
+""",
+        reply_markup=markup
     )
 
 # ====================================
-# CHOOSE WILAYA
+# CHOOSE
 # ====================================
 
-@bot.callback_query_handler(func=lambda c: c.data == "choose_wilaya")
-def choose_wilaya(call):
+@bot.callback_query_handler(func=lambda c: c.data == "choose")
+def choose(call):
 
     bot.answer_callback_query(call.id)
 
@@ -241,12 +193,12 @@ def choose_wilaya(call):
 
     buttons = []
 
-    for wilaya in WILAYAS:
+    for w in WILAYAS:
 
         buttons.append(
             types.InlineKeyboardButton(
-                wilaya,
-                callback_data=f"w_{wilaya}"
+                w,
+                callback_data=f"w_{w}"
             )
         )
 
@@ -265,22 +217,18 @@ def choose_wilaya(call):
 @bot.callback_query_handler(func=lambda c: c.data.startswith("w_"))
 def save_wilaya(call):
 
-    bot.answer_callback_query(
-        call.id,
-        "✅ تم حفظ ولايتك"
-    )
-
-    wilaya = call.data.replace("w_", "").strip()
+    wilaya = call.data.replace("w_", "")
 
     uid = str(call.from_user.id)
 
-    user_db[uid] = {
-        "wilaya": wilaya,
-        "name": call.from_user.first_name,
-        "username": call.from_user.username
-    }
+    user_db[uid]["wilaya"] = wilaya
 
     save_users()
+
+    bot.answer_callback_query(
+        call.id,
+        "✅ تم حفظ الولاية"
+    )
 
     bot.send_message(
         call.message.chat.id,
@@ -289,110 +237,16 @@ def save_wilaya(call):
 
 📍 {wilaya}
 
-🔔 التنبيهات مفعلة الآن.
+🔔 التنبيهات مفعلة
 """
     )
-
-# ====================================
-# CHECK ALL
-# ====================================
-
-@bot.callback_query_handler(func=lambda c: c.data == "check_all")
-def check_all(call):
-
-    bot.answer_callback_query(call.id)
-
-    try:
-
-        data = get_data()
-
-        text = "🌍 حالة جميع الولايات:\n\n"
-
-        for item in data:
-
-            wilaya = item.get("wilayaNameAr")
-
-            available = item.get("available")
-
-            status = (
-                "🟢 متوفر"
-                if available
-                else "🔴 مغلق"
-            )
-
-            text += f"{wilaya} : {status}\n"
-
-        bot.send_message(
-            call.message.chat.id,
-            text
-        )
-
-    except Exception as e:
-
-        print("CHECK ALL ERROR:", e)
-
-        bot.send_message(
-            call.message.chat.id,
-            "⚠️ تعذر الاتصال بالموقع حالياً"
-        )
-
-# ====================================
-# AVAILABLE
-# ====================================
-
-@bot.callback_query_handler(func=lambda c: c.data == "available")
-def available(call):
-
-    bot.answer_callback_query(call.id)
-
-    try:
-
-        data = get_data()
-
-        available_list = []
-
-        for item in data:
-
-            if item.get("available"):
-
-                available_list.append(
-                    item.get("wilayaNameAr")
-                )
-
-        if available_list:
-
-            text = "🟢 الولايات المتاحة:\n\n"
-
-            for w in available_list:
-
-                text += f"• {w}\n"
-
-        else:
-
-            text = "🔴 لا توجد ولايات متاحة حالياً"
-
-        bot.send_message(
-            call.message.chat.id,
-            text
-        )
-
-    except Exception as e:
-
-        print("AVAILABLE ERROR:", e)
-
-        bot.send_message(
-            call.message.chat.id,
-            "⚠️ تعذر الاتصال بالموقع حالياً"
-        )
 
 # ====================================
 # MY WILAYA
 # ====================================
 
-@bot.callback_query_handler(func=lambda c: c.data == "my_wilaya")
+@bot.callback_query_handler(func=lambda c: c.data == "my")
 def my_wilaya(call):
-
-    bot.answer_callback_query(call.id)
 
     uid = str(call.from_user.id)
 
@@ -405,7 +259,7 @@ def my_wilaya(call):
 
         return
 
-    wilaya = user_db[uid].get("wilaya")
+    wilaya = user_db[uid]["wilaya"]
 
     try:
 
@@ -415,7 +269,10 @@ def my_wilaya(call):
 
             if item.get("wilayaNameAr") == wilaya:
 
-                available = item.get("available")
+                available = (
+                    item.get("available") == True
+                    or item.get("quota", 0) > 0
+                )
 
                 status = (
                     "🟢 الحجز متوفر"
@@ -426,7 +283,7 @@ def my_wilaya(call):
                 bot.send_message(
                     call.message.chat.id,
                     f"""
-📍 ولايتك: {wilaya}
+📍 {wilaya}
 
 {status}
 """
@@ -436,12 +293,85 @@ def my_wilaya(call):
 
     except Exception as e:
 
-        print("MY WILAYA ERROR:", e)
+        print(e)
+
+# ====================================
+# AVAILABLE
+# ====================================
+
+@bot.callback_query_handler(func=lambda c: c.data == "available")
+def available(call):
+
+    try:
+
+        data = get_data()
+
+        text = "🟢 الولايات المتاحة:\n\n"
+
+        found = False
+
+        for item in data:
+
+            available = (
+                item.get("available") == True
+                or item.get("quota", 0) > 0
+            )
+
+            if available:
+
+                found = True
+
+                text += f"• {item.get('wilayaNameAr')}\n"
+
+        if not found:
+
+            text = "🔴 لا توجد ولايات متاحة"
 
         bot.send_message(
             call.message.chat.id,
-            "⚠️ تعذر الاتصال بالموقع حالياً"
+            text
         )
+
+    except Exception as e:
+
+        print(e)
+
+# ====================================
+# CHECK ALL
+# ====================================
+
+@bot.callback_query_handler(func=lambda c: c.data == "all")
+def all_wilayas(call):
+
+    try:
+
+        data = get_data()
+
+        text = "🌍 حالة الولايات:\n\n"
+
+        for item in data:
+
+            available = (
+                item.get("available") == True
+                or item.get("quota", 0) > 0
+            )
+
+            status = (
+                "🟢 متوفر"
+                if available
+                else "🔴 مغلق"
+            )
+
+            text += f"{item.get('wilayaNameAr')} : {status}\n"
+
+        bot.send_message(
+            call.message.chat.id,
+            text
+        )
+
+    except Exception as e:
+
+        print(e)
 
 # ====================================
 # MONITOR
@@ -449,9 +379,9 @@ def my_wilaya(call):
 
 def monitor():
 
-    print("🚀 Monitoring Started")
+    print("🚀 MONITOR STARTED")
 
-    previous_status = {}
+    previous = {}
 
     while True:
 
@@ -461,27 +391,26 @@ def monitor():
 
             for item in data:
 
-                wilaya = str(
-                    item.get("wilayaNameAr", "")
-                ).strip()
+                wilaya = item.get("wilayaNameAr")
 
-                available = item.get(
-                    "available",
-                    False
+                available = (
+                    item.get("available") == True
+                    or item.get("quota", 0) > 0
                 )
 
-                if wilaya not in previous_status:
+                if wilaya not in previous:
 
-                    previous_status[wilaya] = available
+                    previous[wilaya] = available
+
                     continue
 
-                if available and previous_status[wilaya] == False:
+                if available and previous[wilaya] == False:
 
                     print(f"🟢 OPEN: {wilaya}")
 
-                    for uid, user_data in list(user_db.items()):
+                    for uid, info in user_db.items():
 
-                        if user_data.get("wilaya") == wilaya:
+                        if info.get("wilaya") == wilaya:
 
                             try:
 
@@ -508,43 +437,20 @@ def monitor():
 
                             except Exception as e:
 
-                                print("SEND ERROR:", e)
+                                print(e)
 
-                elif not available and previous_status[wilaya] == True:
-
-                    print(f"🔴 CLOSED: {wilaya}")
-
-                    for uid, user_data in list(user_db.items()):
-
-                        if user_data.get("wilaya") == wilaya:
-
-                            try:
-
-                                bot.send_message(
-                                    int(uid),
-                                    f"""
-🔴 تم غلق الحجز
-
-📍 {wilaya}
-"""
-                                )
-
-                            except Exception as e:
-
-                                print("CLOSE ERROR:", e)
-
-                previous_status[wilaya] = available
+                previous[wilaya] = available
 
             time.sleep(CHECK_INTERVAL)
 
         except Exception as e:
 
-            print("❌ GET DATA ERROR:", e)
+            print("GET DATA ERROR:", e)
 
             time.sleep(5)
 
 # ====================================
-# THREAD
+# START THREAD
 # ====================================
 
 threading.Thread(
@@ -570,6 +476,6 @@ while True:
 
     except Exception as e:
 
-        print("❌ POLLING ERROR:", e)
+        print("POLLING ERROR:", e)
 
         time.sleep(5)
