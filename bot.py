@@ -10,11 +10,7 @@ import os
 # TOKEN
 # ====================================
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-
-if not API_TOKEN:
-    print("❌ BOT_TOKEN NOT FOUND")
-    exit()
+API_TOKEN = "8068196784:AAHhNIxzdpYBMLj7WOQ3Kb-926ZwYXxWjeA"
 
 bot = telebot.TeleBot(API_TOKEN)
 
@@ -46,7 +42,7 @@ SITE_URL = "https://adhahi.dz"
 # SETTINGS
 # ====================================
 
-CHECK_INTERVAL = 3
+CHECK_INTERVAL = 15
 
 BOT_NAME = "🐑 بوت تنبيهات الأضاحي"
 
@@ -122,40 +118,21 @@ def save_users():
 def get_data():
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
-        "Connection": "keep-alive"
+        "Referer": "https://adhahi.dz/",
+        "Origin": "https://adhahi.dz"
     }
 
-    try:
+    response = session.get(
+        API_URL,
+        headers=headers,
+        timeout=20
+    )
 
-        response = session.get(
-            API_URL,
-            headers=headers,
-            timeout=15
-        )
+    response.raise_for_status()
 
-        if response.status_code != 200:
-
-            print(f"❌ API STATUS: {response.status_code}")
-
-            return []
-
-        data = response.json()
-
-        if not isinstance(data, list):
-
-            print("❌ INVALID API DATA")
-
-            return []
-
-        return data
-
-    except Exception as e:
-
-        print("❌ GET DATA ERROR:", e)
-
-        return []
+    return response.json()
 
 # ====================================
 # WILAYAS
@@ -173,41 +150,19 @@ WILAYAS = [
 ]
 
 # ====================================
-# MESSAGES
+# START MESSAGE
 # ====================================
 
 START_MSG = f"""
 {BOT_NAME}
 
-🔔 بوت مراقبة حجز الأضاحي في الجزائر
+🔔 بوت مراقبة حجز الأضاحي
 
 ⚡ تنبيهات فورية
-📡 مراقبة سريعة
+📡 مراقبة مستمرة
 🌐 ربط مباشر بالموقع الرسمي
 
-اختر الخدمة من الأسفل.
-"""
-
-HELP_MSG = """
-🛠 المساعدة
-
-إذا واجهت أي مشكلة داخل البوت يمكنك التواصل مع المطور.
-"""
-
-OPEN_MSG = """
-🚨 تم فتح الحجز
-
-📍 الولاية: {wilaya}
-
-⚡ الحجز متوفر حالياً.
-"""
-
-CLOSE_MSG = """
-🔴 تم غلق الحجز
-
-📍 الولاية: {wilaya}
-
-⌛ الحجز غير متوفر حالياً.
+اختر من القائمة:
 """
 
 # ====================================
@@ -234,7 +189,7 @@ def main_menu():
 
     markup.add(
         types.InlineKeyboardButton(
-            "📋 عرض الولايات المتاحة",
+            "📋 الولايات المتاحة",
             callback_data="available"
         )
     )
@@ -243,20 +198,6 @@ def main_menu():
         types.InlineKeyboardButton(
             "🔎 فحص ولايتي",
             callback_data="my_wilaya"
-        )
-    )
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "👥 عدد المستخدمين",
-            callback_data="count_users"
-        )
-    )
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "🛠 المساعدة",
-            callback_data="help"
         )
     )
 
@@ -285,47 +226,6 @@ def start(message):
         message.chat.id,
         START_MSG,
         reply_markup=main_menu()
-    )
-
-# ====================================
-# HELP
-# ====================================
-
-@bot.callback_query_handler(func=lambda c: c.data == "help")
-def help_menu(call):
-
-    bot.answer_callback_query(call.id)
-
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "📩 التواصل مع المطور",
-            url="https://t.me/Brahim_Abk"
-        )
-    )
-
-    bot.send_message(
-        call.message.chat.id,
-        HELP_MSG,
-        reply_markup=markup
-    )
-
-# ====================================
-# USERS COUNT
-# ====================================
-
-@bot.callback_query_handler(func=lambda c: c.data == "count_users")
-def count_users(call):
-
-    bot.answer_callback_query(call.id)
-
-    if call.from_user.id != ADMIN_ID:
-        return
-
-    bot.send_message(
-        call.message.chat.id,
-        f"👥 عدد مستخدمي البوت: {len(user_db)}"
     )
 
 # ====================================
@@ -359,64 +259,28 @@ def choose_wilaya(call):
     )
 
 # ====================================
-# SAVE USER
+# SAVE WILAYA
 # ====================================
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("w_"))
-def save(call):
+def save_wilaya(call):
 
     bot.answer_callback_query(
         call.id,
-        "✅ تم حفظ الولاية"
+        "✅ تم حفظ ولايتك"
     )
 
     wilaya = call.data.replace("w_", "").strip()
 
     uid = str(call.from_user.id)
 
-    if uid not in user_db:
-
-        user_db[uid] = {}
-
-    user_db[uid]["wilaya"] = wilaya
-    user_db[uid]["name"] = call.from_user.first_name
-    user_db[uid]["username"] = call.from_user.username
+    user_db[uid] = {
+        "wilaya": wilaya,
+        "name": call.from_user.first_name,
+        "username": call.from_user.username
+    }
 
     save_users()
-
-    current_status = False
-
-    data = get_data()
-
-    for item in data:
-
-        api_wilaya = str(
-            item.get("wilayaNameAr", "")
-        ).strip()
-
-        if api_wilaya == wilaya:
-
-            current_status = item.get(
-                "available",
-                False
-            )
-
-            break
-
-    status_text = (
-        "🟢 الحجز متوفر حالياً"
-        if current_status
-        else "🔴 الحجز مغلق حالياً"
-    )
-
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "🌐 الدخول للموقع",
-            url=SITE_URL
-        )
-    )
 
     bot.send_message(
         call.message.chat.id,
@@ -425,11 +289,8 @@ def save(call):
 
 📍 {wilaya}
 
-{status_text}
-
 🔔 التنبيهات مفعلة الآن.
-""",
-        reply_markup=markup
+"""
     )
 
 # ====================================
@@ -439,38 +300,40 @@ def save(call):
 @bot.callback_query_handler(func=lambda c: c.data == "check_all")
 def check_all(call):
 
-    bot.answer_callback_query(
-        call.id,
-        "⏳ جاري الفحص..."
-    )
+    bot.answer_callback_query(call.id)
 
-    data = get_data()
+    try:
 
-    if not data:
+        data = get_data()
+
+        text = "🌍 حالة جميع الولايات:\n\n"
+
+        for item in data:
+
+            wilaya = item.get("wilayaNameAr")
+
+            available = item.get("available")
+
+            status = (
+                "🟢 متوفر"
+                if available
+                else "🔴 مغلق"
+            )
+
+            text += f"{wilaya} : {status}\n"
+
+        bot.send_message(
+            call.message.chat.id,
+            text
+        )
+
+    except Exception as e:
+
+        print("CHECK ALL ERROR:", e)
 
         bot.send_message(
             call.message.chat.id,
             "⚠️ تعذر الاتصال بالموقع حالياً"
-        )
-
-        return
-
-    text = "🌍 حالة جميع الولايات:\n\n"
-
-    for item in data:
-
-        wilaya = item.get("wilayaNameAr")
-        available = item.get("available")
-
-        status = "🟢 متوفر" if available else "🔴 مغلق"
-
-        text += f"{wilaya} : {status}\n"
-
-    for i in range(0, len(text), 4000):
-
-        bot.send_message(
-            call.message.chat.id,
-            text[i:i+4000]
         )
 
 # ====================================
@@ -480,48 +343,47 @@ def check_all(call):
 @bot.callback_query_handler(func=lambda c: c.data == "available")
 def available(call):
 
-    bot.answer_callback_query(
-        call.id,
-        "🔍 جاري الفحص..."
-    )
+    bot.answer_callback_query(call.id)
 
-    data = get_data()
+    try:
 
-    if not data:
+        data = get_data()
+
+        available_list = []
+
+        for item in data:
+
+            if item.get("available"):
+
+                available_list.append(
+                    item.get("wilayaNameAr")
+                )
+
+        if available_list:
+
+            text = "🟢 الولايات المتاحة:\n\n"
+
+            for w in available_list:
+
+                text += f"• {w}\n"
+
+        else:
+
+            text = "🔴 لا توجد ولايات متاحة حالياً"
+
+        bot.send_message(
+            call.message.chat.id,
+            text
+        )
+
+    except Exception as e:
+
+        print("AVAILABLE ERROR:", e)
 
         bot.send_message(
             call.message.chat.id,
             "⚠️ تعذر الاتصال بالموقع حالياً"
         )
-
-        return
-
-    available_list = []
-
-    for item in data:
-
-        if item.get("available"):
-
-            available_list.append(
-                item.get("wilayaNameAr")
-            )
-
-    if available_list:
-
-        text = "🟢 الولايات المتاحة حالياً:\n\n"
-
-        for w in available_list:
-
-            text += f"• {w}\n"
-
-    else:
-
-        text = "🔴 لا توجد ولايات متاحة حالياً"
-
-    bot.send_message(
-        call.message.chat.id,
-        text
-    )
 
 # ====================================
 # MY WILAYA
@@ -543,71 +405,43 @@ def my_wilaya(call):
 
         return
 
-    my_w = user_db[uid].get("wilaya", "")
+    wilaya = user_db[uid].get("wilaya")
 
-    if not my_w:
+    try:
 
-        bot.send_message(
-            call.message.chat.id,
-            "❌ اختر ولايتك أولاً"
-        )
+        data = get_data()
 
-        return
+        for item in data:
 
-    data = get_data()
+            if item.get("wilayaNameAr") == wilaya:
 
-    if not data:
+                available = item.get("available")
+
+                status = (
+                    "🟢 الحجز متوفر"
+                    if available
+                    else "🔴 الحجز مغلق"
+                )
+
+                bot.send_message(
+                    call.message.chat.id,
+                    f"""
+📍 ولايتك: {wilaya}
+
+{status}
+"""
+                )
+
+                return
+
+    except Exception as e:
+
+        print("MY WILAYA ERROR:", e)
 
         bot.send_message(
             call.message.chat.id,
             "⚠️ تعذر الاتصال بالموقع حالياً"
         )
-
-        return
-
-    for item in data:
-
-        if item.get("wilayaNameAr") == my_w:
-
-            available = item.get("available")
-
-            status = (
-                "🟢 متوفر"
-                if available
-                else "🔴 مغلق"
-            )
-
-            bot.send_message(
-                call.message.chat.id,
-                f"""
-📍 ولايتك: {my_w}
-
-الحالة الحالية:
-{status}
-"""
-            )
-
-            return
-
-# ====================================
-# REMOVE BLOCKED USER
-# ====================================
-
-def remove_blocked_user(uid):
-
-    try:
-
-        if uid in user_db:
-
-            del user_db[uid]
-
-            save_users()
-
-            print(f"❌ USER REMOVED: {uid}")
-
-    except Exception as e:
-
-        print("REMOVE ERROR:", e)
 
 # ====================================
 # MONITOR
@@ -624,11 +458,6 @@ def monitor():
         try:
 
             data = get_data()
-
-            if not data:
-
-                time.sleep(5)
-                continue
 
             for item in data:
 
@@ -648,11 +477,11 @@ def monitor():
 
                 if available and previous_status[wilaya] == False:
 
-                    print(f"🟢 OPEN DETECTED: {wilaya}")
+                    print(f"🟢 OPEN: {wilaya}")
 
-                    for uid, data_user in list(user_db.items()):
+                    for uid, user_data in list(user_db.items()):
 
-                        if data_user.get("wilaya") == wilaya:
+                        if user_data.get("wilaya") == wilaya:
 
                             try:
 
@@ -667,9 +496,13 @@ def monitor():
 
                                 bot.send_message(
                                     int(uid),
-                                    OPEN_MSG.format(
-                                        wilaya=wilaya
-                                    ),
+                                    f"""
+🚨 تم فتح الحجز
+
+📍 {wilaya}
+
+⚡ الحجز متوفر الآن
+""",
                                     reply_markup=markup
                                 )
 
@@ -677,34 +510,28 @@ def monitor():
 
                                 print("SEND ERROR:", e)
 
-                                if "403" in str(e):
-
-                                    remove_blocked_user(uid)
-
                 elif not available and previous_status[wilaya] == True:
 
-                    print(f"🔴 CLOSED DETECTED: {wilaya}")
+                    print(f"🔴 CLOSED: {wilaya}")
 
-                    for uid, data_user in list(user_db.items()):
+                    for uid, user_data in list(user_db.items()):
 
-                        if data_user.get("wilaya") == wilaya:
+                        if user_data.get("wilaya") == wilaya:
 
                             try:
 
                                 bot.send_message(
                                     int(uid),
-                                    CLOSE_MSG.format(
-                                        wilaya=wilaya
-                                    )
+                                    f"""
+🔴 تم غلق الحجز
+
+📍 {wilaya}
+"""
                                 )
 
                             except Exception as e:
 
                                 print("CLOSE ERROR:", e)
-
-                                if "403" in str(e):
-
-                                    remove_blocked_user(uid)
 
                 previous_status[wilaya] = available
 
@@ -712,9 +539,9 @@ def monitor():
 
         except Exception as e:
 
-            print("MONITOR ERROR:", e)
+            print("❌ GET DATA ERROR:", e)
 
-            time.sleep(3)
+            time.sleep(5)
 
 # ====================================
 # THREAD
@@ -725,11 +552,10 @@ threading.Thread(
     daemon=True
 ).start()
 
-print("🤖 BOT RUNNING")
 print("✅ BOT STARTED SUCCESSFULLY")
 
 # ====================================
-# RUN BOT
+# RUN
 # ====================================
 
 while True:
@@ -739,11 +565,11 @@ while True:
         bot.infinity_polling(
             timeout=60,
             long_polling_timeout=60,
-            skip_pending=False
+            skip_pending=True
         )
 
     except Exception as e:
 
-        print("POLLING ERROR:", e)
+        print("❌ POLLING ERROR:", e)
 
-        time.sleep(3)
+        time.sleep(5)
