@@ -42,9 +42,9 @@ SITE_URL = "https://adhahi.dz"
 # SETTINGS
 # ====================================
 
-CHECK_INTERVAL = 1
+CHECK_INTERVAL = 5
 
-BOT_NAME = "🐑 بوت تنبيهات الأضاحي"
+BOT_NAME = "🚨 تنبيهات الأضاحي v2 🚨"
 
 # ====================================
 # FILE
@@ -127,18 +127,49 @@ def get_data():
         response = session.get(
             API_URL,
             headers=headers,
-            timeout=15
+            timeout=20
         )
 
         response.raise_for_status()
 
-        return response.json()
+        data = response.json()
+
+        print("API SUCCESS")
+
+        return data
 
     except Exception as e:
 
         print("API ERROR:", e)
 
         return []
+
+# ====================================
+# GET STATUS
+# ====================================
+
+def get_wilaya_status(wilaya_name):
+
+    data = get_data()
+
+    if not data:
+        return None
+
+    for item in data:
+
+        api_wilaya = str(
+            item.get("wilayaNameAr", "")
+        ).strip()
+
+        available = item.get("available", False)
+
+        print(api_wilaya, available)
+
+        if api_wilaya == wilaya_name:
+
+            return available
+
+    return None
 
 # ====================================
 # WILAYAS
@@ -162,10 +193,10 @@ WILAYAS = [
 START_MSG = f"""
 {BOT_NAME}
 
-🔔 بوت مراقبة حجز الأضاحي في الجزائر
+🔔 بوت مراقبة حجز الأضاحي
 
 ⚡ تنبيهات فورية
-📡 مراقبة سريعة
+📡 مراقبة مستمرة
 🌐 ربط مباشر بالموقع الرسمي
 
 اختر الخدمة من الأسفل.
@@ -174,7 +205,7 @@ START_MSG = f"""
 HELP_MSG = """
 🛠 المساعدة
 
-إذا واجهت أي مشكلة داخل البوت يمكنك التواصل مع المطور.
+إذا واجهت مشكلة داخل البوت تواصل مع المطور.
 """
 
 OPEN_MSG = """
@@ -182,7 +213,7 @@ OPEN_MSG = """
 
 📍 الولاية: {wilaya}
 
-⚡ الحجز متوفر حالياً.
+🟢 الحجز متوفر حالياً
 """
 
 CLOSE_MSG = """
@@ -190,11 +221,11 @@ CLOSE_MSG = """
 
 📍 الولاية: {wilaya}
 
-⌛ الحجز غير متوفر حالياً.
+⛔ الحجز غير متوفر حالياً
 """
 
 # ====================================
-# MAIN MENU
+# MENU
 # ====================================
 
 def main_menu():
@@ -217,7 +248,7 @@ def main_menu():
 
     markup.add(
         types.InlineKeyboardButton(
-            "📋 عرض الولايات المتاحة",
+            "📋 الولايات المتاحة",
             callback_data="available"
         )
     )
@@ -295,7 +326,7 @@ def help_menu(call):
     )
 
 # ====================================
-# COUNT USERS
+# USERS COUNT
 # ====================================
 
 @bot.callback_query_handler(func=lambda c: c.data == "count_users")
@@ -310,39 +341,6 @@ def count_users(call):
         call.message.chat.id,
         f"👥 عدد مستخدمي البوت: {len(user_db)}"
     )
-
-# ====================================
-# USERS LIST
-# ====================================
-
-@bot.message_handler(commands=['users'])
-def users(message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    text = f"👥 عدد المستخدمين: {len(user_db)}\n\n"
-
-    for uid, data in user_db.items():
-
-        name = data.get("name", "None")
-        username = data.get("username", "None")
-        wilaya = data.get("wilaya", "غير محددة")
-
-        text += f"""
-👤 {name}
-📛 @{username}
-🆔 {uid}
-📍 {wilaya}
-
-"""
-
-    for i in range(0, len(text), 4000):
-
-        bot.send_message(
-            message.chat.id,
-            text[i:i+4000]
-        )
 
 # ====================================
 # CHOOSE WILAYA
@@ -375,15 +373,15 @@ def choose_wilaya(call):
     )
 
 # ====================================
-# SAVE USER
+# SAVE WILAYA
 # ====================================
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("w_"))
-def save(call):
+def save_wilaya(call):
 
     bot.answer_callback_query(
         call.id,
-        "✅ تم حفظ الولاية"
+        "✅ تم حفظ ولايتك"
     )
 
     wilaya = call.data.replace("w_", "").strip()
@@ -391,7 +389,6 @@ def save(call):
     uid = str(call.from_user.id)
 
     if uid not in user_db:
-
         user_db[uid] = {}
 
     user_db[uid]["wilaya"] = wilaya
@@ -400,30 +397,19 @@ def save(call):
 
     save_users()
 
-    current_status = False
+    status = get_wilaya_status(wilaya)
 
-    data = get_data()
+    if status is None:
 
-    for item in data:
+        status_text = "⚠️ تعذر الاتصال بالموقع حالياً"
 
-        api_wilaya = str(
-            item.get("wilayaNameAr", "")
-        ).strip()
+    elif status:
 
-        if api_wilaya == wilaya:
+        status_text = "🟢 الحجز متوفر حالياً"
 
-            current_status = item.get(
-                "available",
-                False
-            )
+    else:
 
-            break
-
-    status_text = (
-        "🟢 الحجز متوفر حالياً"
-        if current_status
-        else "🔴 الحجز مغلق حالياً"
-    )
+        status_text = "🔴 الحجز مغلق حالياً"
 
     markup = types.InlineKeyboardMarkup()
 
@@ -443,7 +429,7 @@ def save(call):
 
 {status_text}
 
-🔔 التنبيهات مفعلة الآن.
+🔔 التنبيهات مفعلة الآن
 """,
         reply_markup=markup
     )
@@ -570,9 +556,9 @@ def my_wilaya(call):
 
         return
 
-    data = get_data()
+    status = get_wilaya_status(my_w)
 
-    if not data:
+    if status is None:
 
         bot.send_message(
             call.message.chat.id,
@@ -581,32 +567,24 @@ def my_wilaya(call):
 
         return
 
-    for item in data:
+    text_status = (
+        "🟢 متوفر"
+        if status
+        else "🔴 مغلق"
+    )
 
-        if item.get("wilayaNameAr") == my_w:
-
-            available = item.get("available")
-
-            status = (
-                "🟢 متوفر"
-                if available
-                else "🔴 مغلق"
-            )
-
-            bot.send_message(
-                call.message.chat.id,
-                f"""
+    bot.send_message(
+        call.message.chat.id,
+        f"""
 📍 ولايتك: {my_w}
 
 الحالة الحالية:
-{status}
+{text_status}
 """
-            )
-
-            return
+    )
 
 # ====================================
-# REMOVE BLOCKED USER
+# REMOVE USER
 # ====================================
 
 def remove_blocked_user(uid):
@@ -643,7 +621,7 @@ def monitor():
 
             if not data:
 
-                time.sleep(3)
+                time.sleep(5)
                 continue
 
             for item in data:
@@ -730,7 +708,7 @@ def monitor():
 
             print("MONITOR ERROR:", e)
 
-            time.sleep(3)
+            time.sleep(5)
 
 # ====================================
 # THREAD
@@ -744,7 +722,7 @@ threading.Thread(
 print("🤖 BOT RUNNING")
 
 # ====================================
-# RUN BOT
+# RUN
 # ====================================
 
 while True:
@@ -761,4 +739,4 @@ while True:
 
         print("POLLING ERROR:", e)
 
-        time.sleep(3)
+        time.sleep(5)
